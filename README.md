@@ -1,10 +1,12 @@
 ## Swiss-system Tournament - FSND P2
 ###### Swiss-system tournament defination: http://en.wikipedia.org/wiki/Swiss-system_tournament
-### Versions:
-v1 -- satisfy basic requirements  
-v2 -- satisfy extra requirements
-### API:
-V1 API:
+### Poject Description:
+Realize swiss system tournament with PostgreSQL and Python.      
+Versions:     
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;v1 -- satisfy basic requirements  
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;v2 -- satisfy extra requirements
+### Function Details
+V1 functions and parameters:   
 - deleteMatches(): remove all matches from database
 - deletePlayers(): remove all players from database
 - countPlayers(): count registered players in database
@@ -13,7 +15,7 @@ V1 API:
 - reportMatch(winner, loser): insert new match record into database
 - swissPairsings(): return a list of pairs of players of next round
 
-V2 API:
+V2 functions and parameters:
 - deleteTournaments(t_name=''): delete tournament with tournament name or delete all records
 - deleteMatches(): delete matches from database
 - deletePlayers(): delete players from database
@@ -35,12 +37,30 @@ swiss_sys_tournament/
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;|--- tournament.sql     
 
 ### Quick start
-Put all files within one fold.
+1. install vagrant and VM in your machine, intallation detail:
+    https://www.udacity.com/wiki/ud088/vagrant
+2. download and put folder swiss_sys_tournament within '~/fullstack/vagrant' which is the shared folder between VM and local file system
 
 ### Running locally
-1. Start psql server
-2. test v1: python tournament_test.py within directory v1;    
-   test v2: python tournament_test.py within directory v2.
+1. locate your terminal to directory '~/fullstack/vagrant'
+2. run command 'vagrant up' in terminal to start VM
+3. run command 'vagrant ssh' in terminal to login
+4. start psql server and create database tournament
+5. test  
+    - test v1:
+ - locate to directory v1
+ - run command 'psql tournament'
+ - input '\i tournament.sql' to create tables and functions in database
+ - press 'Ctrl+D' to exit psql
+ - input 'python tournament_test.py' to test 
+    - test v2: 
+ - locate to directory v2
+ - run command 'psql tournament'
+ - input '\i tournament.sql' to create tables and functions in database
+ - press 'Ctrl+D' to exit psql
+ - run 'python tournament_test.py' to test        
+6. run 'exit' to logout
+7. run 'vagrant halt' to shut down VM
 
 ### Result
 All tests passed!

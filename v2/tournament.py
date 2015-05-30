@@ -8,74 +8,87 @@ import psycopg2
 
 def connect():
     """Connect to the PostgreSQL database.  Returns a database connection."""
-    return psycopg2.connect("dbname=tournament")
+    try:
+        conn = psycopg2.connect("dbname=tournament")
+        cursor = conn.cursor()
+        return conn, cursor
+    except:
+        print("Cannot connect to database!")
 
-def deleteTournaments(t_name = ''):
+
+def deleteTournaments(t_name=''):
     """Remove specific tournament or all tournaments from database.
 
     Args:
       t_name: if t_name is empty, remove all tournaments records; otherwise
               delete tournament whose name is t_name.
     """
-    conn = connect()
-    cur = conn.cursor()
+    conn, cur = connect()
     if t_name == '':
-        cur.execute("DELETE FROM TOURNAMENTS;")
+        cur.execute("TRUNCATE MATCHES, PLAYERS, TOURNAMENTS;")
     else:
-        cur.execute("DELETE FROM TOURNAMENTS WHERE T_NAME = %s", (t_name, ))
+        query = "DELETE FROM TOURNAMENTS WHERE T_NAME = %s"
+        param = (t_name,)
+        cur.execute(query, param)
     conn.commit()
     conn.close()
 
+
 def deleteMatches():
     """Remove all the match records from the database."""
-    conn = connect()
-    cur = conn.cursor()
+    conn, cur = connect()
     cur.execute("DELETE FROM MATCHES;")
     conn.commit()
     conn.close()
 
+
 def deletePlayers():
     """Remove all the player records from the database."""
-    conn = connect()
-    cur = conn.cursor()
+    conn, cur = connect()
     cur.execute("DELETE FROM PLAYERS;")
     conn.commit()
     conn.close()
 
-def countPlayers(t_name = ''):
+
+def countPlayers(t_name=''):
     """Returns the number of players currently registered."""
-    conn = connect()
-    cur = conn.cursor()
+    conn, cur = connect()
     if t_name == '':
         cur.execute("SELECT COUNT(*) FROM PLAYERS;")
     else:
         t_id = getTournamentID(t_name, False)
         if t_id == -1:
             return 0
-        cur.execute("SELECT COUNT(*) FROM PLAYERS WHERE T_ID = %s", (t_id,))
+        query = "SELECT COUNT(*) FROM PLAYERS WHERE T_ID = %s"
+        param = (t_id, )
+        cur.execute(query, param)
     row = cur.fetchone()
     conn.close()
     return row[0]
 
-def getTournamentID(t_name, create = True):
+
+def getTournamentID(t_name, create=True):
     """If t_name is not in database, insert into table. Return tournament id.
 
     Args:
       t_name: tournament name
     """
-    conn = connect()
-    cur = conn.cursor()
-    cur.execute("SELECT T_ID FROM TOURNAMENTS WHERE T_NAME = %s;", (t_name,))
+    conn, cur = connect()
+    query = "SELECT T_ID FROM TOURNAMENTS WHERE T_NAME = %s;"
+    param = (t_name, )
+    cur.execute(query, param)
     t_id = cur.fetchone()
-    if t_id == None and create:
-        cur.execute("INSERT INTO TOURNAMENTS (T_NAME) VALUES (%s);", (t_name,))
+    if t_id is None and create:
+        query = "INSERT INTO TOURNAMENTS (T_NAME) VALUES (%s);"
+        cur.execute(query, param)
         conn.commit()
-        cur.execute("SELECT T_ID FROM TOURNAMENTS ORDER BY T_ID DESC LIMIT 1;")
+        cur.execute("SELECT MAX(T_ID) FROM TOURNAMENTS;")
         t_id = cur.fetchone()
     conn.close()
-    if t_id == None and create == False:
+    if t_id is None and create is False:
         return -1
     return t_id[0]
+
 
 def registerPlayer(name, t_name):
     """Adds a player to the tournament database.
@@ -86,18 +99,18 @@ def registerPlayer(name, t_name):
     Args:
       name: the player's full name (need not be unique).
     """
-    conn = connect()
-    cur = conn.cursor()
+    conn, cur = connect()
     t_id = getTournamentID(t_name)
-    cur.execute("INSERT INTO PLAYERS (P_NAME, T_ID) VALUES (%s, %s);", (name, t_id,))
+    query = "INSERT INTO PLAYERS (P_NAME, T_ID) VALUES (%s, %s);"
+    param = (name, t_id,)
+    cur.execute(query, param)
     conn.commit()
     conn.close()
 
-def playerStandings(t_name):
-    """Returns a list of the players and their win records, sorted by wins.
 
-    The first entry in the list should be the player in first place, or a player
-    tied for first place if there is currently a tie.
+def playerStandings(t_name):
+    """Returns a list of the players and their win records, sorted by wins,
+    omw, player_id.
 
     Returns:
       A list of tuples, each of which contains (id, name, wins, matches):
@@ -109,35 +122,16 @@ def playerStandings(t_name):
     t_id = getTournamentID(t_name, False)
     if t_id == -1:
         return []
-    conn = connect()
-    cur = conn.cursor()
-    cur.execute("CREATE OR REPLACE VIEW WINS AS SELECT P_ID, COUNT(WINNER) \
-                 AS WIN_CNT FROM PLAYERS LEFT JOIN MATCHES ON P_ID = WINNER\
-                 GROUP BY P_ID ORDER BY P_ID;")
+    conn, cur = connect()
+    cur.execute("SELECT create_summary();")
     conn.commit()
-    cur.execute("CREATE OR REPLACE VIEW MATCH_WIN AS \
-                 SELECT T1.P1, T1.P2, CNT1, WIN_CNT AS CNT2 FROM \
-                 (SELECT P1, P2, WIN_CNT AS CNT1 FROM MATCHES, WINS \
-                 WHERE P_ID = P1) AS T1, WINS WHERE T1.P2 = P_ID;")
-    conn.commit()
-    cur.execute("CREATE OR REPLACE VIEW OMW AS\
-                 SELECT T.P_ID, SUM(T.CNT) AS OP_CNT FROM (SELECT P1 AS P_ID, \
-                 CNT2 AS CNT FROM MATCH_WIN UNION ALL SELECT P2 AS P_ID, CNT1 \
-                 AS CNT FROM MATCH_WIN) AS T GROUP BY P_ID ORDER BY P_ID;")
-    conn.commit()
-    cur.execute("CREATE OR REPLACE VIEW SUMMARY AS SELECT WINS.P_ID, T2.P_NAME,\
-                 WINS.WIN_CNT, T2.COUNT AS MATCH_CNT FROM WINS, \
-                 (SELECT PLAYERS.P_ID, PLAYERS.P_NAME, COUNT(WINNER) FROM \
-                 PLAYERS LEFT JOIN MATCHES ON P_ID = P1 OR P_ID = P2 WHERE \
-                 T_ID = %s GROUP BY P_ID) AS T2 WHERE WINS.P_ID = T2.P_ID \
-                 ORDER BY WIN_CNT DESC;", (t_id,))
-    cur.execute("SELECT SUMMARY.P_ID, SUMMARY.P_NAME, SUMMARY.WIN_CNT, \
-                 SUMMARY.MATCH_CNT FROM (SUMMARY LEFT JOIN OMW ON \
-                 SUMMARY.P_ID=OMW.P_ID) ORDER BY SUMMARY.WIN_CNT DESC, \
-                 OMW.OP_CNT DESC;")
+    query = "SELECT P_ID, P_NAME, WIN, MATCH FROM SUMMARY WHERE T_ID = %s"
+    param = (t_id, )
+    cur.execute(query, param)
     ps = [(int(row[0]), str(row[1]), int(row[2]), int(row[3]))
           for row in cur.fetchall()]
     return ps
+
 
 def reportMatch(p1, p2, winner=-1):
     """Records the outcome of a single match between two players.
@@ -150,16 +144,13 @@ def reportMatch(p1, p2, winner=-1):
     """
     if p1 > p2:
         p1, p2 = p2, p1
-    conn = connect()
-    cur = conn.cursor()
-    if winner != -1 :
-        cur.execute("INSERT INTO MATCHES (P1, P2, WINNER) VALUES (%s, %s, %s)",
-                    (p1, p2, winner,))
-    else :
-        cur.execute("INSERT INTO MATCHES (P1, P2) VALUES (%s, %s);",
-                    (p1, p2,))
+    conn, cur = connect()
+    query = "SELECT report_match(%s, %s, %s)"
+    param = (p1, p2, winner,)
+    cur.execute(query, param)
     conn.commit()
     conn.close()
+
 
 def played(p1, p2):
     """Returns boolean that tells whether this is rematch between playes or not
@@ -170,14 +161,14 @@ def played(p1, p2):
     Returns:
       Return true if this is rematch between p1 and p2, otherwise return false
     """
-    conn = connect()
-    cur = conn.cursor()
+    conn, cur = connect()
     if p1 > p2:
         p1, p2 = p2, p1
     cur.execute("SELECT * FROM MATCHES WHERE P1 = %s and P2 = %s;", (p1, p2,))
     row = cur.fetchone()
     conn.close()
-    return row != None
+    return row is not None
+
 
 def swissPairings(t_name):
     """Returns a list of pairs of players for the next round of a match.
@@ -196,7 +187,7 @@ def swissPairings(t_name):
     """
     rank = playerStandings(t_name)
     pairs = []
-    if len(rank)%2!=0:
+    if len(rank) % 2 != 0:
         for i in range(len(rank), 0, -1):
             if played(rank[i-1][0], rank[i-1][0]) == False:
                 ele = rank[i-1]
